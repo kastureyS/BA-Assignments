@@ -1,7 +1,5 @@
 ## Movie Review Using LDAvis
 
-![alt tag](https://github.com/kastureyS/BA-Assignments/blob/master/Hotel%20reviews.png)
-
 ### Preprocessing the data
 
 Before fitting a topic model, we need to tokenize the text. We remove punctuation and some common stop words. In particular, we use the english stop words from the SMART information retrieval system, available in the R package tm.
@@ -115,4 +113,5 @@ The serVis() function can take json and serve the result in a variety of ways. H
 ```s
 serVis(json, out.dir = 'vis', open.browser = TRUE)
 ```
-
+#### Screen-Shot
+![alt tag](https://github.com/kastureyS/BA-Assignments/blob/master/Hotel%20reviews.png)
