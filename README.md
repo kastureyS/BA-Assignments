@@ -1,69 +1,118 @@
-## LDAvis
+## Movie Review Using LDAvis
 
 ![alt tag](https://github.com/kastureyS/BA-Assignments/blob/master/Hotel%20reviews.png)
 
-**LDAvis** is designed to help users interpret the topics in a topic model that has been fit to a corpus of text data. The package extracts information from a fitted LDA topic model to inform an interactive web-based visualization.
+### Preprocessing the data
 
-### Installing the package
-
-* Stable version on CRAN:
+Before fitting a topic model, we need to tokenize the text. We remove punctuation and some common stop words. In particular, we use the english stop words from the SMART information retrieval system, available in the R package tm.
 
 ```s
-install.packages("LDAvis")
+# read in some stopwords:
+library(tm)
+stop_words <- stopwords("SMART")
+stop_words <- c(stop_words, "room", "hotel", "bed", "bathroom", "london", "us", "get", "got", "said", "the", "also", "just","for", "can", "may", "now", "year")
+stop_words <- tolower(stop_words)
+
+# pre-processing:
+hotel_reviews <- gsub("'", "", hotel_reviews) # remove apostrophes
+hotel_reviews <- gsub("[[:punct:]]", " ", hotel_reviews)  # replace punctuation with space
+hotel_reviews <- gsub("[[:cntrl:]]", " ", hotel_reviews)  # replace control characters with space
+hotel_reviews <- gsub("^[[:space:]]+", "", hotel_reviews) # remove whitespace at beginning of documents
+hotel_reviews <- gsub("[[:space:]]+$", "", hotel_reviews) # remove whitespace at end of documents
+hotel_reviews <- gsub("[^a-zA-Z -]", " ", hotel_reviews) # allows only letters
+hotel_reviews <- tolower(hotel_reviews)  # force to lowercase
+hotel_reviews <- hotel_reviews[hotel_reviews != ""] # remove blank docs
+
+# tokenize on space and output as a list:
+doc.list <- strsplit(hotel_reviews, "[[:space:]]+")
+
+# compute the table of terms:
+term.table <- table(unlist(doc.list))
+term.table <- sort(term.table, decreasing = TRUE)
+
+# remove terms that are stop words or occur fewer than 5 times:
+del <- names(term.table) %in% stop_words | term.table < 5
+term.table <- term.table[!del]
+term.table <- term.table[names(term.table) != ""] #table with names
+vocab <- names(term.table)
+
+# now put the documents into the format required by the lda package:
+get.terms <- function(x) {
+   index <- match(x, vocab)
+   index <- index[!is.na(index)]
+   rbind(as.integer(index - 1), as.integer(rep(1, length(index))))
+}
+documents <- lapply(doc.list, get.terms)
+
 ```
 
-### Getting started
+### Using the R package 'lda' for model fitting
+The object documents is a length-575 list where each element represents one document, according to the specifications of the lda package. After creating this list, we compute a few statistics about the corpus:
 
-Once installed, we recommend a visit to the main help page:
+```s
+# Compute some statistics related to the data set:
+D <- length(documents)  # number of documents (575)
+W <- length(vocab)  # number of terms in the vocab (193)
+doc.length <- sapply(documents, function(x) sum(x[2, ]))  # number of tokens per document [11, 6, 4, 2 ...]
+N <- sum(doc.length)  # total number of tokens in the data (2297)
+term.frequency <- as.integer(term.table)  # frequencies of terms in the corpus [118,110,99,53,50,39 ...]
+
+```
+
+Next, we set up a topic model with 10 topics, relatively diffuse priors for the topic-term distributions (ηη = 0.02) and document-topic distributions (αα = 0.02), and we set the collapsed Gibbs sampler to run for 3,000 iterations . This block of code takes about 5.614015 secs to run.
+
+```s
+# MCMC and model tuning parameters:
+K <- 10 #number of topics
+G <- 3000 #number of iteration
+alpha <- 0.02
+eta <- 0.02
+
+# Fit the model:
+library(lda)
+t1 <- Sys.time()
+fit <- lda.collapsed.gibbs.sampler(documents = documents, K = K, vocab = vocab, 
+                                   num.iterations = G, alpha = alpha, 
+                                   eta = eta, initial = NULL, burnin = 0,
+                                   compute.log.likelihood = TRUE)
+t2 <- Sys.time()
+t2 - t1  #About bout 5.614015 secs
+
+```
+
+### Visualizing the fitted model with LDAvis
+
+```s
+theta <- t(apply(fit$document_sums + alpha, 2, function(x) x/sum(x)))
+phi <- t(apply(t(fit$topics) + eta, 2, function(x) x/sum(x)))
+
+```
+We save these, along with ϕϕ, θθ, and vocab, in a list as the data object hotel_reviews_for_LDA, which is included in the LDAvis package.
+
+```s
+hotel_reviews_for_LDA <- list(phi = phi,
+                    theta = theta,
+                    doc.length = doc.length,
+                    vocab = vocab,
+                    term.frequency = term.frequency)
+```
+
+Now we're ready to call the createJSON() function in LDAvis. This function will return a character string representing a JSON object used to populate the visualization.
 
 ```s
 library(LDAvis)
-help(createJSON, package = "LDAvis")
+library(servr)
+json <- createJSON(phi = hotel_reviews_for_LDA$phi, 
+                  theta = hotel_reviews_for_LDA$theta, 
+                  doc.length = hotel_reviews_for_LDA$doc.length, 
+                  vocab = hotel_reviews_for_LDA$vocab, 
+                  term.frequency = hotel_reviews_for_LDA$term.frequency)
 ```
+The serVis() function can take json and serve the result in a variety of ways. Here we'll write json to a file within the 'vis' directory 
 
-The documentation and example on the bottom of that page should provide a quick sense of how to create (and share) your own visualizations. If you want more details about the technical specifications of the visualization, see the vignette:
+(http://127.0.0.1:4321/#topic=0&lambda=1&term=)
 
 ```s
-vignette("details", package = "LDAvis")
+serVis(json, out.dir = 'vis', open.browser = TRUE)
 ```
 
-Note that **LDAvis** itself does not provide facilities for *fitting* the model (only *visualizing* a fitted model). If you want to perform LDA in R, there are several packages, including [mallet](http://cran.r-project.org/web/packages/mallet/index.html), [lda](http://cran.r-project.org/web/packages/lda/index.html), and [topicmodels](http://cran.r-project.org/web/packages/topicmodels/index.html).
-
-If you want to perform LDA with the R package **lda** and visualize the result with **LDAvis**, our example of a [20-topic model fit to 2,000 movie reviews](http://cpsievert.github.io/LDAvis/reviews/reviews.html) may be helpful.
-
-**LDAvis** does not limit you to topic modeling facilities in R. If you use other tools ([MALLET](http://mallet.cs.umass.edu/) and [gensim](https://radimrehurek.com/gensim/) are popular), we recommend that you visit our [Twenty Newsgroups](http://cpsievert.github.io/LDAvis/newsgroup/newsgroup.html) example to help quickly understand what components **LDAvis** will need.
-
-### Sharing a Visualization
-
-To share a visualization that you created using **LDAvis**, you can encode the state of the visualization into the URL by appending a string of the form:
-
-"#topic=k&lambda=l&term=s"
-
-to the end of the URL, where "k", "l", and "s" are strings indicating the desired values of the selected topic, the value of lambda, and the selected term, respectively. For more details, see the last section of our [Movie Reviews example](http://cpsievert.github.io/LDAvis/reviews/reviews.html), or for a quick example, see the link here:
-
-[http://cpsievert.github.io/LDAvis/reviews/vis/#topic=3&lambda=0.6&term=cop](http://cpsievert.github.io/LDAvis/reviews/vis/#topic=3&lambda=0.6&term=cop)
-
-### Video demos
-
-* [Visualizing & Exploring the Twenty Newsgroup Data](http://stat-graphics.org/movies/ldavis.html)
-* [Visualizing Topic Models demo with Hacker News Corpus](https://www.youtube.com/watch?v=tGxW2BzC_DU)
-  * [Notebook w/Visualization](http://nbviewer.ipython.org/github/bmabey/hacker_news_topic_modelling/blob/master/HN%20Topic%20Model%20Talk.ipynb)
-  * [Slide deck](https://speakerdeck.com/bmabey/visualizing-topic-models)
-
-### More documentation
-
-To read about the methodology behind LDAvis, see [our paper](http://nlp.stanford.edu/events/illvi2014/papers/sievert-illvi2014.pdf), which we presented at the [2014 ACL Workshop on Interactive Language Learning, Visualization, and Interfaces](http://nlp.stanford.edu/events/illvi2014/) in Baltimore on June 27, 2014.
-
-### Additional data
-
-We included one data set in LDAvis, 'TwentyNewsgroups', which consists of a list with 5 elements:
-- phi, a matrix with the topic-term distributions
-- theta, a matrix with the document-topic distributions
-- doc.length, a numeric vector with token counts for each document
-- vocab, a character vector containing the terms
-- term.frequency, a numeric vector of observed term frequencies
-
-We also created a second data-only package called [LDAvisData](https://github.com/cpsievert/LDAvisData) to hold additional example data sets. Currently there are three more examples available there:
-- Movie Reviews (a 20-topic model fit to 2,000 movie reviews)
-- AP (a 40-topic model fit to approximately 2,246 news articles)
-- Jeopardy (a 100-topic model fit to approximately 20,000 Jeopardy questions)
