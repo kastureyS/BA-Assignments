@@ -1,4 +1,4 @@
-## Movie Review Using LDAvis
+## Holiday Inn London Hotel Review Using LDAvis
 
 ### Preprocessing the data
 
