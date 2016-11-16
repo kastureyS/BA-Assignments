@@ -108,10 +108,11 @@ json <- createJSON(phi = hotel_reviews_for_LDA$phi,
 ```
 The serVis() function can take json and serve the result in a variety of ways. Here we'll write json to a file within the 'vis' directory 
 
-(http://127.0.0.1:4321/#topic=0&lambda=1&term=)
-
 ```s
 serVis(json, out.dir = 'vis', open.browser = TRUE)
 ```
+(https://kastureys.github.io/) 
+Accidently entered local link.
+
 #### Screen-Shot
 ![alt tag](https://github.com/kastureyS/BA-Assignments/blob/master/Hotel%20reviews.png)
